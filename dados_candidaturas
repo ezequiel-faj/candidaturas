@@ -1,0 +1,14 @@
+import pandas as pd
+import os
+
+# a plataforma de dados to TSE oferece um csv com os dados gerais dos candidatos. Dentro do zip, o 'consulta_cand_2018_BRASIL.csv' oferece
+# o consolidado de todos os estados. Ele é acompanhado de um 'leiame.pdf' que dá descrição de cada coluna.
+
+# esse script carrega o csv em uma dataframe e coloca o campo "SQ_CANDIDATO" como index. Segundo o leiame, esse campo é o
+# "Número sequencial do candidato gerado internamente pelos sistemas eleitorais. Não é o númerode campanhado candidato".
+
+# O SQ_CANDIDATO serve de parâmetro para encontrar infos em outras partes do TSE.
+
+os.chdir("CAMINHO DA PASTA ONDE ESTÁ O CSV")
+df = pd.read_csv('consulta_cand_2018_BRASIL.csv', sep=';', encoding='latin1', index_col='SQ_CANDIDATO')
+df
