@@ -1,0 +1,15 @@
+import pandas as pd
+import os
+import json
+
+# esse script gera uma dataframe agregando o csv de dados e o de bens.
+# Como o procedimento é rápido, optei por não gerar um novo csv.
+
+os.chdir('C:\\Users\\ezequ\\Dropbox\\Candidatos\\CSVs')
+
+
+df_dados = pd.read_csv('consulta_cand_2018_BRASIL.csv',  encoding = "latin1", sep=';', na_values='#NULO#', index_col='SQ_CANDIDATO')
+df_bens  = pd.read_csv('df_bens.csv', encoding='latin1', index_col='SQ_CANDIDATO')
+df_bens.columns = ['TOTAL_BENS', 'LISTA_BENS'] # uma pequena correção =)
+df_bens['LISTA_BENS'] = df_bens['LISTA_BENS'].apply(json.loads)
+df_f = df_dados.join(df_bens)
