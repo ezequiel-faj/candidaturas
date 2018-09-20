@@ -1,0 +1,61 @@
+import requests
+import json
+import pandas as pd
+import os
+import numpy as np
+
+def pack(c):
+    if c != np.nan:
+        c = json.dumps(c)
+    return c
+
+s = requests.session()
+
+
+
+
+
+#cria o csv vazio. Atenção: Isso vai sobrepor o csv anterior
+r = s.get('http://divulgacandcontas.tse.jus.br/divulga/rest/v1/prestador/consulta/2022802018/2018/SP/7/45/45232/250000605641')
+colunas = r.json().keys()
+colunas = list(colunas)
+df = pd.DataFrame(columns=colunas)
+df.set_index('idCandidato', inplace=True)
+df.to_csv('prest_contas.csv', encoding='cp1252')
+
+
+
+
+
+#carrega algumas infos do csv dos dados do candidatos para gerar pamatetros para o webscrap
+df = pd.read_csv('consulta_cand_2018_BRASIL.csv', encoding = "ISO-8859-1", sep=';', usecols=['SG_UE', 'CD_CARGO', 'NR_PARTIDO', 'NR_CANDIDATO', 'SQ_CANDIDATO'])
+df = df[['SG_UE', 'CD_CARGO', 'NR_PARTIDO', 'NR_CANDIDATO', 'SQ_CANDIDATO']]
+
+url = 'http://divulgacandcontas.tse.jus.br/divulga/rest/v1/prestador/consulta/2022802018/2018/'
+rp = [] 
+
+for i in df.itertuples():
+    i = list(i)[1:]
+    param = '/'.join([str(a).strip() for a in i])
+    j = s.get(url + param).json()
+    rp += [j]    
+
+    if len(rp) > 99:
+        df_n = df.append(rp)
+        
+        for col in ['dadosConsolidados', 'historicoEntregas', 'despesas', 'concentracaoDespesas', 'rankingDoadores', 'rankingFornecedores', 'contasBancarias', 'qualificacoes' ]:
+            df_n[col] = df_n[col].apply(pack)
+
+        df_n = df_n[colunas]
+        df_n.set_index('idCandidato', inplace=True)
+
+        df_n.to_csv('prest_contas.csv', encoding='cp1252', mode='a', header=False)
+        rp = []
+       
+df_n = df.append(rp)
+for col in ['dadosConsolidados', 'historicoEntregas', 'despesas', 'concentracaoDespesas', 'rankingDoadores', 'rankingFornecedores', 'contasBancarias', 'qualificacoes' ]:
+    df_n[col] = df_n[col].apply(pack)
+df_n = df_n[colunas]
+df_n.set_index('idCandidato', inplace=True)
+df_n.to_csv('prest_contas.csv', encoding='cp1252', mode='a', header=False)
+rp = []
