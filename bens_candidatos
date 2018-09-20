@@ -1,0 +1,71 @@
+import pandas as pd
+import os
+import json
+
+# a plataforma de dados to TSE (http://www.tse.jus.br/eleicoes/estatisticas/repositorio-de-dados-eleitorais-1/repositorio-de-dados-eleitorais)
+# oferece um csv com os os bens declarados dos candidatos. Dentro do zip, o 'bem_candidato_2018_BRASIL.csv' oferece
+# o consolidado de todos os estados. Ele é acompanhado de um 'leiame.pdf' que dá descrição de cada coluna.
+
+# Esse csv gera uma linha para cada bem, indexando pelo "SQ_CANDIDATO". Essa disposição de dados é interessante para leituras
+# em excel, mas não para operações com o pandas ou cruzamento de dados.
+
+# Esse script altera a disposição dos dados para que cada candidato ocupe apenas uma linha, consolidando as informações
+# em dicionários.
+
+
+os.chdir('C:\\Users\\ezequ\\Dropbox\\Candidatos\\bem_candidato\\bem_candidato_2018 (2)')
+
+
+df_b = pd.read_csv('bem_candidato_2018_BRASIL.csv',  encoding = "latin1", sep=';', na_values='#NULO#')
+
+#essa rotina não é muito boa, foi feita quando eu tava estudando pandas, mas funciona!
+df_b_subset = df_b[['SQ_CANDIDATO','NR_ORDEM_CANDIDATO', 'CD_TIPO_BEM_CANDIDATO', 'DS_TIPO_BEM_CANDIDATO', 'DS_BEM_CANDIDATO', 'VR_BEM_CANDIDATO']]
+zz = df_b['SQ_CANDIDATO'].tolist()
+a  = df_b['NR_ORDEM_CANDIDATO'].tolist()
+b  = df_b['CD_TIPO_BEM_CANDIDATO'].tolist()
+c  = df_b['DS_TIPO_BEM_CANDIDATO'].tolist()
+d  = df_b['DS_BEM_CANDIDATO'].tolist()
+e  = df_b['VR_BEM_CANDIDATO'].tolist()
+e = [float(i.replace(',','.')) for i in e]
+f = list(zip(zz,a,b,c,d,e))
+f = [list(i) for i in f]
+
+df_b_subset['agregado'] = f
+
+sq_unicos = list(df_b['SQ_CANDIDATO'].unique())
+
+
+rf =[]
+for n, i in enumerate(sq_unicos):
+    print(n,'        ', end='\r')
+    rp = [i]
+    for v in f:
+        if v[0] == i:
+            rp.append(v[1:])
+    rf.append(rp)
+
+_0 = [i[0] for i in rf]
+_1 = [i[1:] for i in rf]
+_2 = [i[1:] for i in rf]
+
+for entrada in _2:
+    x = sum([i[-1] for i in entrada])
+    entrada.insert(0, x)
+
+_1 = [round(i[0],2) for i in _2]
+
+_2 = [i[1:] for i in _2]
+
+df_bens_complementar = pd.DataFrame()
+df_bens_complementar['SQ_CANDIDATO'] = _0
+df_bens_complementar['TOTAL_BENS']   = _1
+df_bens_complementar['LISTA_BENS']    = _2
+df_bens_complementar.set_index('SQ_CANDIDATO', inplace=True)
+
+# altera para o diretório de saída
+os.chdir('C:\\Users\\ezequ\\Dropbox\\Candidatos\\bem_candidato')
+
+# é necessário passar o json.dumps para manter a estrutura dos dados
+df_bens_complementar['LITA_BENS'] = df_bens_complementar['LITA_BENS'].apply(json.dumps)
+
+df_bens_complementar.to_csv('df_bens.csv', encoding='latin1')
