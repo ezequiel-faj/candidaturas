@@ -1,0 +1,59 @@
+rp = []
+l = 0
+for a in df.itertuples():
+
+    res = {'data' : a[1]}
+    
+    sp = bs(a[2], 'lxml')
+
+    try:
+        res['link_info'] = sp.find('a', text=' Andamento processual').get('href')
+    except:
+        res['link_info'] = np.nan
+
+    try:
+        res['link_int_teor'] = sp.find('a', text=' Inteiro teor ').get('href')
+    except:
+        res['link_int_teor'] = np.nan
+
+    try:
+        res['n_processo']         = sp.findAll('p', attrs={'class':'espacamento'})[0].get_text().strip()
+    except:  
+        res['n_processo']         = np.nan
+    try:  
+        res['titulo_processo']    = sp.findAll('p', attrs={'class':'espacamento'})[1].get_text().strip()
+    except:  
+        res['titulo_processo']    = np.nan
+    try:
+        res['subtitulo_processo'] = sp.findAll('p', attrs={'class':'espacamento'})[2].get_text().strip()
+    except:
+        res['subtitulo_processo'] = np.nan
+    try:
+        res['relator']            = sp.findAll('p', attrs={'class':'espacamento'})[3].get_text().strip()
+    except:
+        res['relator']            = np.nan
+        
+    
+    try:
+        res['publicacao']   = sp.find('div', attrs={'class':'itens'}).findNext('div').get_text().strip()
+    except:
+        res['publicacao']     = np.nan
+    
+    res['ementa']             = sp.find('h1', attrs={'class' :'ementa'}, text=re.compile('\sEmenta:\s')).findNext('div').get_text().strip()
+    
+    try:
+        res['decisao']        = sp.find('h1', attrs={'class' :'ementa'}, text=re.compile('\sDecisão:\s')).findNext('div').get_text().strip()
+    except:
+        res['decisao']        = np.nan
+    
+    try:
+        res['partes']         = sp.find('h1', attrs={'class' :'ementa'}, text=re.compile('\sPartes:\s')).findNext('div').get_text().strip()
+    except:
+        res['partes']         = np.nan
+#     res['eleicoes']           = sp.findAll('p', attrs={'class': 'espacamento', 'align': 'JUSTIFY'})[-1].get_text().strip()
+
+    rp += [res]
+    print(l, '         ', end='\r')
+    
+    l +=1
+    
