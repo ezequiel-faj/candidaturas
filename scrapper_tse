@@ -1,0 +1,321 @@
+import requests
+from bs4 import BeautifulSoup as bs
+import re
+import time
+import os
+import json
+import pandas as pd
+
+os.chdir('C:\\Users\\Pichau\\Dropbox\\TSE')
+
+s = requests.session()
+tribunais = ['tse']
+
+
+colunas = ['iter_ano', 'iter_ordem', 'url', 'nome_recurso', 'uf_origem', 'municipio', 'n_protocolo', 'data_protocolo', 'hora_protocolo', 'partes', 'assunto', 'localizacao', 'fase_atual', 'movimentacoes']
+df = pd.read_csv('infos_tse.csv', encoding='cp1252', sep=';', usecols=['iter_ano', 'iter_ordem'])
+ano = df['iter_ano'].max()
+ordem = df['iter_ordem'].max()
+
+url1 = 'http://inter03.tse.jus.br/sadpPush/ExibirDadosProcesso.do?'
+url2 = 'http://inter03.tse.jus.br'
+       
+
+data = {
+'partesSelecionadas': 'Andamento',
+'partesSelecionadas': 'Despachos',
+'partesSelecionadas': 'Decis%E3o',
+'partesSelecionadas': 'Documentos+Juntados'
+        
+}
+
+head = {
+    
+'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+'Accept-Encoding': 'gzip, deflate',
+'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+'Cache-Control': 'max-age=0',
+'Connection': 'keep-alive',
+'Content-Length': '137',
+'Content-Type': 'application/x-www-form-urlencoded',
+'Host': 'inter03.tse.jus.br',
+'Origin': 'http://inter03.tse.jus.br',
+'Upgrade-Insecure-Requests': '1'
+}
+coleta = []
+for tribunal in tribunais:
+    falha = 0
+    while falha < 500:
+        params = {'nprot': str(ordem) + str(ano),
+                  'comboTribunal': tribunal}
+
+        try:
+            r = s.get(url1, params=params)
+        except:
+            time.sleep(10)
+            r = s.get(url1, params=params)
+            
+        head['Referer'] = r.url
+        sp = bs(r.text, 'html5lib' )
+        x = sp
+        sp.findAll('input', attrs={'name':'partesSelecionadas'})
+        dic_params = {'Andamento'           : 'Andamento',
+                      'Despachos'           : 'Despachos',
+                      'Decisão'             : 'Decis%E3o',
+                      'Documentos Juntados' : 'Documentos+Juntados',
+                      'Distribuição'        : 'Distribui%E7%E3o',
+                      'Petições'            : 'Peti%E7%F5es',
+                      'Processos Apensados' : 'Processos+Apensados'}
+        rf = []
+        for item in sp.findAll('input', attrs={'name':'partesSelecionadas'}):
+            rp = item.get('value')
+            rf += ['partesSelecionadas=' + dic_params[rp]]
+        rf = '&'.join(rf) + '&todos=Todos'
+        
+                
+        try:
+            quebrar = 0
+            sp.find('font', attrs={'color': 'RED'}).get_text()
+            quebrar = 1
+        except:
+            pass
+            
+
+        if sp.div.get_text().strip() != 'Processo não pode ser localizado !' and quebrar == 0:
+        
+            url_token = sp.find('form').get('action')
+
+            if ';' in url_token:
+                url_token = re.match('(.*);', url_token).group(1)
+
+            r = s.get(url2 +  url_token +  '?' +   rf, headers=head )
+
+            res = {'url'       : head['Referer'],
+                  'iter_ano'   : ano            ,
+                  'iter_ordem' : ordem          }
+            
+            sp = bs(r.text, 'html5lib' )
+
+            if url_token  == '/sadpPush/ExibirPartesProcessoJudDocRec.do':
+
+        
+
+                rp = sp.find(text='IDENTIFICAÇÃO:').findNext('td', attrs={'width': '61%'}).get_text().replace('&ordm;', 'º').strip()
+                res['nome_recurso'] = rp[:-7]
+                res['uf_origem']    = rp[-2:]
+                rp = sp.find(text='MUNICÍPIO:').findNext('td', attrs={'width': '61%'}).get_text()
+                res['municipio']    = re.sub('\s\s+', ' ', rp).strip()
+
+                rp = sp.find(text='PROTOCOLO:').findNext('td').findNext('td').get_text().strip()
+                res['n_protocolo']    = re.search('(.+?)\s', rp).group(1)
+                res['data_protocolo'] = re.search('\d\d/\d\d/\d\d\d\d', rp).group()
+                res['hora_protocolo'] = rp[-5:]
+
+                lista_p = sp.find('td', text='PROTOCOLO:').findAllNext('td', attrs={'align': 'right'})
+                rp = []
+                for item in lista_p:
+
+                    if item.get('valign') == 'top':
+                        break
+
+                    rp += [item]
+
+                rf = []
+                for item in rp:
+                    dic_prov = {item.get_text().replace(':', ''):item.findNext('td', attrs={'width':'84%' }).get_text().strip()}
+                    if item.get_text().replace(':', '')[:7] == 'ADVOGAD':
+                        rf[-1].update(dic_prov)
+                    else:
+                        rf += [dic_prov]
+
+                res['partes'] = rf
+                res['assunto'] = sp.find(text='ASSUNTO:').findNext('td', attrs={'width': '61%'}).get_text().strip()
+                res['localizacao'] = sp.find(text='LOCALIZAÇÃO:').findNext('td', attrs={'width': '61%'}).get_text().strip()
+                res['fase_atual'] = sp.find( text='FASE ATUAL:').findNext('td', attrs={'width': '84%'}).get_text().strip()
+                lista_p  = sp.findAll('a', attrs={'class':'hintanchor'})
+                rf = []
+                for item in lista_p:
+                    rp = [item.get_text().strip()]
+
+                    rp2 = item.findNext('td').get_text()
+                    rp += [re.search('\d\d/\d\d/\d\d\d\d', rp2).group()]
+                    rp += [re.search('\d\d:\d\d', rp2).group()]
+                    rp += [item.findNext('td', attrs={'width':'60%' }).get_text().strip()]
+
+                    rf += [rp]
+                res['movimentacoes'] = rf
+
+            elif url_token == '/sadpPush/ExibirPartesProcessoJudDoc.do':
+
+
+                rp = sp.find(text='IDENTIFICAÇÃO:').findNext('td', attrs={'width': '44%'}).get_text().strip()
+                res['nome_recurso'] = re.match('(.*?)\s+', rp).group(1)           
+                res['uf_origem']    = rp[-2:]
+
+                rp = sp.find(text='MUNICÍPIO:').findNext('td', attrs={'width': '44%'}).get_text().strip()
+                res['municipio']    = re.sub('\s\s+', ' ', rp).strip()
+
+
+                rp = sp.find(text='PROTOCOLO:').findNext('td').findNext('td').get_text().strip()
+                res['n_protocolo']    = re.search('(.+?)\s', rp).group(1)
+                res['data_protocolo'] = re.search('\d\d/\d\d/\d\d\d\d', rp).group()
+                res['hora_protocolo'] = rp[-5:]
+
+                lista_p = sp.find(text='PROTOCOLO:').findAllNext('td', attrs={'align': 'right'})
+
+                rp = []
+                for item in lista_p:
+
+                    if item.get('valign') == 'top':
+                        break
+
+                    rp += [item]
+
+                rf = []
+                for item in rp:
+                    dic_prov = {item.get_text().replace(':', '').strip():item.findNext('td', attrs={'width':'84%' }).get_text().strip()}
+                    if item.get_text().replace(':', '')[:7] == 'ADVOGAD':
+                        rf[-1].update(dic_prov)
+                    else:
+                        rf += [dic_prov]
+
+                res['partes'] = rf
+                res['assunto'] = sp.find(text='ASSUNTO:').findNext('td', attrs={'width': '61%'}).get_text().strip()
+                res['localizacao'] = sp.find(text='LOCALIZAÇÃO:').findNext('td', attrs={'colspan': '2'}).get_text().strip()
+                res['fase_atual'] = sp.find( text='FASE ATUAL:').findNext('td', attrs={'colspan': '2'}).get_text().strip()
+                lista_p  = sp.findAll('a', attrs={'class':'hintanchor'})
+                rf = []
+                for item in lista_p:
+                    rp = [item.get_text().strip()]
+
+                    rp2 = item.findNext('td').get_text()
+                    rp += [re.search('\d\d/\d\d/\d\d\d\d', rp2).group()]
+                    rp += [re.search('\d\d:\d\d', rp2).group()]
+                    rp += [item.findNext('td', attrs={'width':'60%' }).get_text().strip()]
+
+                    rf += [rp]
+                res['movimentacoes'] = rf
+
+            elif url_token  == '/sadpPush/ExibirPartesProcessoJud.do':
+                
+                rp = sp.find(text='PROCESSO :').findNext('td', attrs={'width': '61%'}).get_text().strip()
+                rf = re.match('(.*?)UF', rp, flags=re.DOTALL).group(1)
+                res['nome_recurso'] = re.sub('\s\s+', ' ', rf).strip()
+                res['uf_origem']    = rp[-2:]
+
+                rp = sp.find(text='MUNICÍPIO:').findNext('td', attrs={'width': '61%'}).get_text()
+                res['municipio']    = re.sub('\s\s+', ' ', rp).strip()
+
+                rp = sp.find(text='PROTOCOLO:').findNext('td').findNext('td').get_text().strip()
+                res['n_protocolo']    = re.search('(.+?)\s', rp).group(1)
+                res['data_protocolo'] = re.search('\d\d/\d\d/\d\d\d\d', rp).group()
+                res['hora_protocolo'] = rp[-5:]
+
+                lista_p = sp.find('td', text='PROTOCOLO:').findAllNext('td', attrs={'align': 'right'})
+                rp = []
+                for item in lista_p:
+
+                    if item.get('valign') == 'top':
+                        break
+
+                    rp += [item]
+
+                rf = []
+                for item in rp:
+                    dic_prov = {item.get_text().replace(':', ''):item.findNext('td', attrs={'width':'84%' }).get_text().strip()}
+                    if item.get_text().replace(':', '')[:7] == 'ADVOGAD':
+                        rf[-1].update(dic_prov)
+                    else:
+                        rf += [dic_prov]
+
+                res['partes'] = rf
+                res['assunto'] = sp.find(text='ASSUNTO:').findNext('td', attrs={'width': '61%'}).get_text().strip()
+                res['localizacao'] = sp.find(text='LOCALIZAÇÃO:').findNext('td', attrs={'width': '61%'}).get_text().strip()
+                res['fase_atual'] = sp.find( text='FASE ATUAL:').findNext('td', attrs={'width': '84%'}).get_text().strip()
+                lista_p  = sp.findAll('a', attrs={'class':'hintanchor'})
+                rf = []
+                for item in lista_p:
+                    rp = [item.get_text().strip()]
+
+                    rp2 = item.findNext('td').get_text()
+                    rp += [re.search('\d\d/\d\d/\d\d\d\d', rp2).group()]
+                    rp += [re.search('\d\d:\d\d', rp2).group()]
+                    rp += [item.findNext('td', attrs={'width':'60%' }).get_text().strip()]
+
+                    rf += [rp]
+                res['movimentacoes'] = rf
+
+            
+            elif url_token == '/sadpPush/ExibirPartesProcessoCGE.do':
+                rp = sp.find(text='PROCESSO CGE:').findNext('td', attrs={'width': '58%'}).get_text().strip()
+                rf = re.match('(.*?)UF', rp, flags=re.DOTALL).group(1)
+                res['nome_recurso'] = re.sub('\s\s+', ' ', rf).strip()
+                res['uf_origem']    = rp[-2:]
+                
+                rp = sp.find(text='MUNICÍPIO:').findNext('td', attrs={'width': '58%'}).get_text().strip()
+                res['municipio']    = re.sub('\s\s+', ' ', rp).strip()
+                
+                rp = sp.find(text='PROTOCOLO:').findNext('td').findNext('td').get_text().strip()
+                res['n_protocolo']    = re.search('(.+?)\s', rp).group(1)
+                res['data_protocolo'] = re.search('\d\d/\d\d/\d\d\d\d', rp).group()
+                res['hora_protocolo'] = rp[-5:]
+                
+                lista_p = sp.find('td', text='PROTOCOLO:').findAllNext('td', attrs={'align': 'right'})
+                rp = []
+                for item in lista_p:
+
+                    if item.get('valign') == 'top':
+                        break
+
+                    rp += [item]
+
+                rf = []
+                for item in rp:
+                    dic_prov = {item.get_text().replace(':', ''):item.findNext('td', attrs={'width':'84%' }).get_text().strip()}
+                    if item.get_text().replace(':', '')[:7] == 'ADVOGAD':
+                        rf[-1].update(dic_prov)
+                    else:
+                        rf += [dic_prov]
+
+                res['partes'] = rf
+                res['assunto'] = sp.find(text='ASSUNTO:').findNext('td', attrs={'width': '58%'}).get_text().strip()
+                res['localizacao'] = sp.find(text='LOCALIZAÇÃO:').findNext('td', attrs={'width': '58%'}).get_text().strip()
+                res['fase_atual'] = sp.find( text='FASE ATUAL:').findNext('td', attrs={'width': '84%'}).get_text().strip()
+                lista_p  = sp.findAll('a', attrs={'class':'hintanchor'})
+                rf = []
+                for item in lista_p:
+                    rp = [item.get_text().strip()]
+
+                    rp2 = item.findNext('td').get_text()
+                    rp += [re.search('\d\d/\d\d/\d\d\d\d', rp2).group()]
+                    rp += [re.search('\d\d:\d\d', rp2).group()]
+                    rp += [item.findNext('td', attrs={'width':'60%' }).get_text().strip()]
+
+                    rf += [rp]
+                res['movimentacoes'] = rf  
+        
+        
+            else:
+                print('outro')
+                break
+        print(ordem, '        ', end='\r')
+        ordem +=1
+        time.sleep(1)
+        
+        if len(res) == 14:
+            coleta += [res]
+            res = {}
+            falha = 0
+        else:
+            falha +=1
+            
+        if len(coleta) > 250:
+            df_base = pd.DataFrame(columns=colunas)
+            df_base = df_base.append(coleta)
+            df_base['partes']          = df_base['partes'].apply(json.dumps)
+            df_base['movimentacoes'] = df_base['movimentacoes'].apply(json.dumps)
+
+            df_base.to_csv('infos_tse.csv', encoding='cp1252', sep=';', mode='a', header=False)    
+            coleta = []
+            
+        
