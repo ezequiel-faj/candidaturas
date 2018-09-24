@@ -1,0 +1,114 @@
+import os
+os.chdir('C:\\Users\\ezequ\\Dropbox\\Candidatos\\CSVs')
+import pandas as pd
+import json
+import numpy as np
+
+def unpack(c):
+    if c != np.nan:
+        c = json.loads(c)
+    return c
+
+
+df_prest_contas = pd.read_csv('prest_contas.csv', encoding='cp1252', index_col='idCandidato')
+for col in ['dadosConsolidados', 'historicoEntregas', 'despesas', 'concentracaoDespesas', 'rankingDoadores', 'rankingFornecedores', 'contasBancarias', 'qualificacoes' ]:
+            df_prest_contas[col] = df_prest_contas[col].apply(unpack)
+
+df_prest_contas.index.name = 'SQ_CANDIDATO'
+
+
+n_colunas = ['SG_UF', 'NM_PARTIDO', 'DS_CARGO', 'concentracaoDespesas']
+df_n = df[n_colunas]
+
+colunass = [
+'SG_UF',
+'NM_PARTIDO',
+'DS_CARGO',
+'Publicidade por materiais impressos',
+'Produção de programas de rádio, televisão ou vídeo',
+'Serviços prestados por terceiros',
+'Despesas com pessoal',
+'Publicidade por adesivos',
+'Atividades de militância e mobilização de rua',
+'Doações financeiras a outros candidatos/partidos',
+'Cessão ou locação de veículos',
+'Baixa de Estimaveis - Recursos de pessoas físicas',
+'Baixa de Estimaveis - Recursos de partido político',
+'Combustíveis e lubrificantes',
+'Despesa com Impulsionamento de Conteúdos',
+'Pesquisas ou testes eleitorais',
+'Baixa de Estimaveis - Recursos de outros candidatos',
+'Diversas a especificar',
+'Despesas com transporte ou deslocamento',
+'Locação/cessão de bens imóveis',
+'Serviços próprios prestados por terceiros',
+'Produção de jingles, vinhetas e slogans',
+'Criação e inclusão de páginas na internet',
+'Locação/cessão de bens móveis (exceto veículos)',
+'Baixa de Estimaveis - Recursos próprios',
+'Eventos de promoção da candidatura',
+'Publicidade por carros de som',
+'Publicidade por jornais e revistas',
+'Correspondências e despesas postais',
+'Alimentação',
+'Comícios',
+'Pré-instalação física de comitê de campanha',
+'Materiais de expediente',
+'Despesas com Hospedagem',
+'Encargos financeiros, taxas bancárias e/ou op. cartão de crédito',
+'Passagem Aérea',
+'Taxa de Administração de Financiamento Coletivo',
+'Água',
+'Aquisição/Doação de bens móveis ou imóveis',
+'Telefone',
+'Impostos, contribuições e taxas',
+'Reembolsos de gastos realizados por eleitores',
+'Energia elétrica',
+'Baixa de Estimaveis - Cessão ou locação de veículos',
+'Encargos sociais',
+'Baixa de Estimaveis - Publicidade por materiais impressos'
+]
+
+
+df_final = pd.DataFrame(columns=colunass)
+
+estados = list(df_n.SG_UF.unique())
+partidos = list(df_n.NM_PARTIDO.unique())
+cargos = list(df_n.DS_CARGO.unique())
+
+# estados = ['RJ']
+# partidos = ['PARTIDO HUMANISTA DA SOLIDARIEDADE']
+# cargos = ['DEPUTADO ESTADUAL', 'DEPUTADO FEDERAL']
+
+for estado in estados:
+    df_estado = df_n[df_n['SG_UF'] == estado]
+    for partido in partidos:
+        df_partido = df_estado[df_estado['NM_PARTIDO'] == partido]
+        for cargo in cargos:
+            try:
+                df_cargo = df_partido[df_partido['DS_CARGO'] == cargo]
+                lista_despesas = df_cargo['concentracaoDespesas'].tolist()
+                lista_despesas = [i for i in lista_despesas if type(i) == list and len(i) > 0]
+                lista_despesas = sum(lista_despesas, [])
+                df_apd = pd.DataFrame(lista_despesas)
+                df_apd = df_apd.groupby(['dsDRD']).sum()
+                df_apd = pd.pivot_table(df_apd, columns=['dsDRD'])
+                df_apd['SG_UF'] = estado
+                df_apd['NM_PARTIDO'] = partido
+                df_apd['DS_CARGO'] = cargo
+                df_final = df_final.append(df_apd, ignore_index=True)
+            except:
+                pass
+
+
+
+df_final.set_index(['SG_UF', 'NM_PARTIDO', 'DS_CARGO'], inplace=True, drop=True)
+del df_final['dsDRD']
+df_final.sort_index(inplace=True)
+df_final
+
+writer = pd.ExcelWriter('prestacao_contas.xlsx')
+df_final.to_excel(writer, 'levantamento01', merge_cells=True)
+df_final.to_excel(writer, 'levantamento02', merge_cells=False)
+writer.save()
+writer.close()
